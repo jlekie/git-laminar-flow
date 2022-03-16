@@ -336,3 +336,23 @@ export const ElementSchema = Zod.tuple([
     ]),
     Zod.string()
 ]);
+
+export const ElementUriSchema = Zod.string().url().transform(value => {
+    const parts = value.split('://');
+
+    return Zod.object({
+        type: Zod.union([
+            Zod.literal('feature'),
+            Zod.literal('release'),
+            Zod.literal('hotfix'),
+            Zod.literal('support')
+        ]),
+        qualifier: Zod.string()
+    }).parse({
+        type: parts[0],
+        qualifier: parts[1]
+    });
+});
+export function parseElementUri(uri: string) {
+    return ElementUriSchema.parse(uri);
+}
