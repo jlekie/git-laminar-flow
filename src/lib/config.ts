@@ -16,13 +16,15 @@ export const ConfigReleaseSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
-    sources: Zod.string().array().optional()
+    sources: Zod.string().array().optional(),
+    intermediate: Zod.boolean().optional()
 });
 export const ConfigHotfixSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
-    sources: Zod.string().array().optional()
+    sources: Zod.string().array().optional(),
+    intermediate: Zod.boolean().optional()
 });
 export const ConfigSupportSchema = Zod.object({
     name: Zod.string(),
@@ -76,9 +78,9 @@ export class ConfigBase {
             hash.update(upstream.url);
         }
 
-        for (const include in this.included)
-            hash.update(include);
-        for (const exclude in this.excluded)
+        for (const include of this.included)
+            hash.update(include)
+        for (const exclude of this.excluded)
             hash.update(exclude);
 
         for (const submodule of this.submodules)
@@ -161,6 +163,7 @@ export class ReleaseBase {
     readonly branchName!: string;
     readonly sourceSha!: string;
     readonly sources!: readonly string[];
+    readonly intermediate!: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
@@ -170,6 +173,8 @@ export class ReleaseBase {
         for (const source of this.sources)
             hash.update(source);
 
+        hash.update(this.intermediate.toString());
+
         return this;
     }
 
@@ -178,7 +183,8 @@ export class ReleaseBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
-            sources: this.sources.slice()
+            sources: this.sources.slice(),
+            intermediate: this.intermediate
         }
     }
 }
@@ -187,6 +193,7 @@ export class HotfixBase {
     readonly branchName!: string;
     readonly sourceSha!: string;
     readonly sources!: readonly string[];
+    readonly intermediate!: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
@@ -196,6 +203,8 @@ export class HotfixBase {
         for (const source of this.sources)
             hash.update(source);
 
+        hash.update(this.intermediate.toString());
+
         return this;
     }
 
@@ -204,7 +213,8 @@ export class HotfixBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
-            sources: this.sources.slice()
+            sources: this.sources.slice(),
+            intermediate: this.intermediate
         }
     }
 }
@@ -280,7 +290,7 @@ export type ConfigReference = {
     url: string;
 } | {
     type: 'glfs';
-    hostname: string;
+    hostname?: string;
     namespace: string;
     name: string;
 }
@@ -314,11 +324,23 @@ export function parseConfigReference(uri: string): ConfigReference {
     else if (protocol === 'glfs') {
         const parts = qualifier.split('/');
 
-        return {
-            type: protocol,
-            hostname: parts[0],
-            namespace: parts[1],
-            name: parts[2]
+        if (parts.length === 3) {
+            return {
+                type: protocol,
+                hostname: parts[0],
+                namespace: parts[1],
+                name: parts[2]
+            }
+        }
+        else if (parts.length === 2) {
+            return {
+                type: protocol,
+                namespace: parts[0],
+                name: parts[1]
+            }
+        }
+        else {
+            throw new Error(`GLFS Uri invalid [${uri}]`)
         }
     }
 
