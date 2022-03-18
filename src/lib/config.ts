@@ -9,18 +9,21 @@ export const ConfigSubmoduleSchema = Zod.object({
 export const ConfigFeatureSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
-    sourceSha: Zod.string()
+    sourceSha: Zod.string(),
+    upstream: Zod.string().optional()
 });
 export const ConfigReleaseSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
+    upstream: Zod.string().optional(),
     intermediate: Zod.boolean().optional()
 });
 export const ConfigHotfixSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
+    upstream: Zod.string().optional(),
     intermediate: Zod.boolean().optional()
 });
 export const ConfigSupportSchema = Zod.object({
@@ -28,6 +31,7 @@ export const ConfigSupportSchema = Zod.object({
     masterBranchName: Zod.string(),
     developBranchName: Zod.string(),
     sourceSha: Zod.string(),
+    upstream: Zod.string().optional(),
     features: ConfigFeatureSchema.array().optional(),
     releases: ConfigReleaseSchema.array().optional(),
     hotfixes: ConfigHotfixSchema.array().optional()
@@ -154,11 +158,14 @@ export class FeatureBase {
     readonly name!: string;
     readonly branchName!: string;
     readonly sourceSha!: string;
+    readonly upstream?: string;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
+
+        this.upstream && hash.update(this.upstream);
 
         return this;
     }
@@ -167,7 +174,8 @@ export class FeatureBase {
         return {
             name: this.name,
             branchName: this.branchName,
-            sourceSha: this.sourceSha
+            sourceSha: this.sourceSha,
+            upstream: this.upstream
         }
     }
 }
@@ -175,12 +183,15 @@ export class ReleaseBase {
     readonly name!: string;
     readonly branchName!: string;
     readonly sourceSha!: string;
+    readonly upstream?: string;
     readonly intermediate!: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
+
+        this.upstream && hash.update(this.upstream);
 
         hash.update(this.intermediate.toString());
 
@@ -192,6 +203,7 @@ export class ReleaseBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
+            upstream: this.upstream,
             intermediate: this.intermediate
         }
     }
@@ -200,12 +212,15 @@ export class HotfixBase {
     readonly name!: string;
     readonly branchName!: string;
     readonly sourceSha!: string;
+    readonly upstream?: string;
     readonly intermediate!: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
+
+        this.upstream && hash.update(this.upstream);
 
         hash.update(this.intermediate.toString());
 
@@ -217,6 +232,7 @@ export class HotfixBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
+            upstream: this.upstream,
             intermediate: this.intermediate
         }
     }
@@ -226,6 +242,7 @@ export class SupportBase {
     readonly masterBranchName!: string;
     readonly developBranchName!: string;
     readonly sourceSha!: string;
+    readonly upstream?: string;
 
     readonly features!: readonly FeatureBase[];
     readonly releases!: readonly ReleaseBase[];
@@ -236,6 +253,8 @@ export class SupportBase {
         hash.update(this.masterBranchName);
         hash.update(this.developBranchName);
         hash.update(this.sourceSha);
+
+        this.upstream && hash.update(this.upstream);
 
         for (const feature of this.features)
             feature.updateHash(hash);
@@ -253,6 +272,7 @@ export class SupportBase {
             masterBranchName: this.masterBranchName,
             developBranchName: this.developBranchName,
             sourceSha: this.sourceSha,
+            upstream: this.upstream,
             features: this.features.map(i => i.toHash()),
             releases: this.releases.map(i => i.toHash()),
             hotfixes: this.hotfixes.map(i => i.toHash())
