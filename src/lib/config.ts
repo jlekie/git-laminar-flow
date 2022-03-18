@@ -9,21 +9,18 @@ export const ConfigSubmoduleSchema = Zod.object({
 export const ConfigFeatureSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
-    sourceSha: Zod.string(),
-    sources: Zod.string().array().optional()
+    sourceSha: Zod.string()
 });
 export const ConfigReleaseSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
-    sources: Zod.string().array().optional(),
     intermediate: Zod.boolean().optional()
 });
 export const ConfigHotfixSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
-    sources: Zod.string().array().optional(),
     intermediate: Zod.boolean().optional()
 });
 export const ConfigSupportSchema = Zod.object({
@@ -47,7 +44,12 @@ export const ConfigSchema = Zod.object({
     hotfixes: ConfigHotfixSchema.array().optional(),
     supports: ConfigSupportSchema.array().optional(),
     included: Zod.string().array().optional(),
-    excluded: Zod.string().array().optional()
+    excluded: Zod.string().array().optional(),
+    featureMessageTemplate: Zod.string().optional(),
+    releaseMessageTemplate: Zod.string().optional(),
+    hotfixMessageTemplate: Zod.string().optional(),
+    releaseTagTemplate: Zod.string().optional(),
+    hotfixTagTemplate: Zod.string().optional()
 });
 
 export class ConfigBase {
@@ -63,6 +65,11 @@ export class ConfigBase {
     readonly supports!: readonly SupportBase[];
     readonly included!: readonly string[];
     readonly excluded!: readonly string[];
+    readonly featureMessageTemplate?: string;
+    readonly releaseMessageTemplate?: string;
+    readonly hotfixMessageTemplate?: string;
+    readonly releaseTagTemplate?: string;
+    readonly hotfixTagTemplate?: string;
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
         const hash = Crypto.createHash(algorithm);
@@ -94,6 +101,12 @@ export class ConfigBase {
         for (const support of this.supports)
             support.updateHash(hash);
 
+        this.featureMessageTemplate && hash.update(this.featureMessageTemplate);
+        this.releaseMessageTemplate && hash.update(this.releaseMessageTemplate);
+        this.hotfixMessageTemplate && hash.update(this.hotfixMessageTemplate);
+        this.releaseTagTemplate && hash.update(this.releaseTagTemplate);
+        this.hotfixTagTemplate && hash.update(this.hotfixTagTemplate);
+
         return this;
     }
 
@@ -107,7 +120,12 @@ export class ConfigBase {
             hotfixes: this.hotfixes.map(i => i.toHash()),
             supports: this.supports.map(i => i.toHash()),
             included: this.included.slice(),
-            excluded: this.excluded.slice()
+            excluded: this.excluded.slice(),
+            featureMessageTemplate: this.featureMessageTemplate,
+            releaseMessageTemplate: this.releaseMessageTemplate,
+            hotfixMessageTemplate: this.hotfixMessageTemplate,
+            releaseTagTemplate: this.releaseTagTemplate,
+            hotfixTagTemplate: this.hotfixTagTemplate,
         }
     }
 }
@@ -136,15 +154,11 @@ export class FeatureBase {
     readonly name!: string;
     readonly branchName!: string;
     readonly sourceSha!: string;
-    readonly sources!: readonly string[];
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
-
-        for (const source of this.sources)
-            hash.update(source);
 
         return this;
     }
@@ -153,8 +167,7 @@ export class FeatureBase {
         return {
             name: this.name,
             branchName: this.branchName,
-            sourceSha: this.sourceSha,
-            sources: this.sources.slice()
+            sourceSha: this.sourceSha
         }
     }
 }
@@ -162,16 +175,12 @@ export class ReleaseBase {
     readonly name!: string;
     readonly branchName!: string;
     readonly sourceSha!: string;
-    readonly sources!: readonly string[];
     readonly intermediate!: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
-
-        for (const source of this.sources)
-            hash.update(source);
 
         hash.update(this.intermediate.toString());
 
@@ -183,7 +192,6 @@ export class ReleaseBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
-            sources: this.sources.slice(),
             intermediate: this.intermediate
         }
     }
@@ -192,16 +200,12 @@ export class HotfixBase {
     readonly name!: string;
     readonly branchName!: string;
     readonly sourceSha!: string;
-    readonly sources!: readonly string[];
     readonly intermediate!: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
-
-        for (const source of this.sources)
-            hash.update(source);
 
         hash.update(this.intermediate.toString());
 
@@ -213,7 +217,6 @@ export class HotfixBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
-            sources: this.sources.slice(),
             intermediate: this.intermediate
         }
     }
