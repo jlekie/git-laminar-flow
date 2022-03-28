@@ -56,6 +56,20 @@ export const ConfigSchema = Zod.object({
     hotfixTagTemplate: Zod.string().optional()
 });
 
+export type RecursiveConfigSubmoduleSchema = Zod.infer<typeof ConfigSubmoduleSchema> & {
+    config?: RecursiveConfigSchema
+};
+export const RecursiveConfigSubmoduleSchema: Zod.ZodType<RecursiveConfigSubmoduleSchema> = Zod.lazy(() => ConfigSubmoduleSchema.extend({
+    config: RecursiveConfigSchema.optional()
+}));
+
+export type RecursiveConfigSchema = Zod.infer<typeof ConfigSchema> & {
+    submodules?: RecursiveConfigSubmoduleSchema[]
+};
+export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.lazy(() => ConfigSchema.extend({
+    submodules: RecursiveConfigSubmoduleSchema.array().optional()
+}));
+
 export class ConfigBase {
     readonly identifier!: string;
     readonly upstreams!: readonly {
@@ -118,13 +132,13 @@ export class ConfigBase {
         return {
             identifier: this.identifier,
             upstreams: this.upstreams.slice(),
-            submodules: this.submodules.map(i => i.toHash()),
-            features: this.features.map(i => i.toHash()),
-            releases: this.releases.map(i => i.toHash()),
-            hotfixes: this.hotfixes.map(i => i.toHash()),
-            supports: this.supports.map(i => i.toHash()),
-            included: this.included.slice(),
-            excluded: this.excluded.slice(),
+            submodules: this.submodules.length ? this.submodules.map(i => i.toHash()) : undefined,
+            features: this.features.length ? this.features.map(i => i.toHash()) : undefined,
+            releases: this.releases.length ? this.releases.map(i => i.toHash()) : undefined,
+            hotfixes: this.hotfixes.length ? this.hotfixes.map(i => i.toHash()) : undefined,
+            supports: this.supports.length ? this.supports.map(i => i.toHash()) : undefined,
+            included: this.included.length ? this.included.slice() : undefined,
+            excluded: this.excluded.length ? this.excluded.slice() : undefined,
             featureMessageTemplate: this.featureMessageTemplate,
             releaseMessageTemplate: this.releaseMessageTemplate,
             hotfixMessageTemplate: this.hotfixMessageTemplate,
