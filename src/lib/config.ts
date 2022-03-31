@@ -38,6 +38,7 @@ export const ConfigSupportSchema = Zod.object({
 });
 export const ConfigSchema = Zod.object({
     identifier: Zod.string(),
+    managed: Zod.boolean().optional(),
     upstreams: Zod.object({
         name: Zod.string(),
         url: Zod.string()
@@ -72,6 +73,7 @@ export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.laz
 
 export class ConfigBase {
     readonly identifier!: string;
+    readonly managed!: boolean;
     readonly upstreams!: readonly {
         readonly name: string;
         readonly url: string
@@ -97,6 +99,9 @@ export class ConfigBase {
     }
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.identifier);
+
+        if (!this.managed)
+            hash.update('unmanaged');
 
         for (const upstream of this.upstreams) {
             hash.update(upstream.name);
@@ -131,6 +136,7 @@ export class ConfigBase {
     public toHash() {
         return {
             identifier: this.identifier,
+            managed: this.managed === false ? this.managed : undefined,
             upstreams: this.upstreams.slice(),
             submodules: this.submodules.length ? this.submodules.map(i => i.toHash()) : undefined,
             features: this.features.length ? this.features.map(i => i.toHash()) : undefined,
