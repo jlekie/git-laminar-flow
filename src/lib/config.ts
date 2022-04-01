@@ -4,7 +4,8 @@ import * as Crypto from 'crypto';
 export const ConfigSubmoduleSchema = Zod.object({
     name: Zod.string(),
     path: Zod.string(),
-    url: Zod.string().optional()
+    url: Zod.string().optional(),
+    tags: Zod.string().array().optional()
 });
 export const ConfigFeatureSchema = Zod.object({
     name: Zod.string(),
@@ -54,7 +55,8 @@ export const ConfigSchema = Zod.object({
     releaseMessageTemplate: Zod.string().optional(),
     hotfixMessageTemplate: Zod.string().optional(),
     releaseTagTemplate: Zod.string().optional(),
-    hotfixTagTemplate: Zod.string().optional()
+    hotfixTagTemplate: Zod.string().optional(),
+    tags: Zod.string().array().optional()
 });
 
 export type RecursiveConfigSubmoduleSchema = Zod.infer<typeof ConfigSubmoduleSchema> & {
@@ -90,6 +92,7 @@ export class ConfigBase {
     readonly hotfixMessageTemplate?: string;
     readonly releaseTagTemplate?: string;
     readonly hotfixTagTemplate?: string;
+    readonly tags!: readonly string[];
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
         const hash = Crypto.createHash(algorithm);
@@ -130,6 +133,9 @@ export class ConfigBase {
         this.releaseTagTemplate && hash.update(this.releaseTagTemplate);
         this.hotfixTagTemplate && hash.update(this.hotfixTagTemplate);
 
+        for (const tag of this.tags)
+            hash.update(tag);
+
         return this;
     }
 
@@ -150,6 +156,7 @@ export class ConfigBase {
             hotfixMessageTemplate: this.hotfixMessageTemplate,
             releaseTagTemplate: this.releaseTagTemplate,
             hotfixTagTemplate: this.hotfixTagTemplate,
+            tags: this.tags.length ? this.tags.slice() : undefined
         }
     }
 }
@@ -157,11 +164,15 @@ export class SubmoduleBase {
     readonly name!: string;
     readonly path!: string;
     readonly url?: string;
+    readonly tags!: readonly string[];
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
         hash.update(this.path);
         this.url && hash.update(this.url);
+
+        for (const tag of this.tags)
+            hash.update(tag);
 
         return this;
     }
@@ -170,7 +181,8 @@ export class SubmoduleBase {
         return {
             name: this.name,
             path: this.path,
-            url: this.url
+            url: this.url,
+            tags: this.tags.length ? this.tags.slice() : undefined
         }
     }
 }
