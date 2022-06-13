@@ -1,6 +1,26 @@
+import * as _ from 'lodash'
 import * as Zod from 'zod';
 import * as Crypto from 'crypto';
+import * as Semver from 'semver';
 
+export const ConfigOptionsSchema = Zod.object({
+    autoCommitSubmodules: Zod.boolean().optional()
+});
+
+export const ConfigMessageTemplate = Zod.object({
+    name: Zod.string(),
+    message: Zod.string()
+});
+export const ConfigTagTemplate = Zod.object({
+    name: Zod.string(),
+    tag: Zod.string(),
+    annotation: Zod.string().optional()
+});
+
+export const ConfigTaggingSchema = Zod.object({
+    name: Zod.string(),
+    annotation: Zod.string().optional()
+});
 export const ConfigSubmoduleSchema = Zod.object({
     name: Zod.string(),
     path: Zod.string(),
@@ -11,21 +31,24 @@ export const ConfigFeatureSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
-    upstream: Zod.string().optional()
+    upstream: Zod.string().optional(),
+    tags: ConfigTaggingSchema.array().optional()
 });
 export const ConfigReleaseSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
     upstream: Zod.string().optional(),
-    intermediate: Zod.boolean().optional()
+    intermediate: Zod.boolean().optional(),
+    tags: ConfigTaggingSchema.array().optional()
 });
 export const ConfigHotfixSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
     upstream: Zod.string().optional(),
-    intermediate: Zod.boolean().optional()
+    intermediate: Zod.boolean().optional(),
+    tags: ConfigTaggingSchema.array().optional()
 });
 export const ConfigSupportSchema = Zod.object({
     name: Zod.string(),
@@ -37,9 +60,14 @@ export const ConfigSupportSchema = Zod.object({
     releases: ConfigReleaseSchema.array().optional(),
     hotfixes: ConfigHotfixSchema.array().optional()
 });
+export const ConfigIntegrationSchema = Zod.object({
+    plugin: Zod.string(),
+    options: Zod.record(Zod.string(), Zod.unknown()).optional()
+});
 export const ConfigSchema = Zod.object({
     identifier: Zod.string(),
     managed: Zod.boolean().optional(),
+    version: Zod.string().optional(),
     upstreams: Zod.object({
         name: Zod.string(),
         url: Zod.string()
@@ -56,7 +84,10 @@ export const ConfigSchema = Zod.object({
     hotfixMessageTemplate: Zod.string().optional(),
     releaseTagTemplate: Zod.string().optional(),
     hotfixTagTemplate: Zod.string().optional(),
-    tags: Zod.string().array().optional()
+    tags: Zod.string().array().optional(),
+    integrations: ConfigIntegrationSchema.array().optional(),
+    commitMessageTemplates: ConfigMessageTemplate.array().optional(),
+    tagTemplates: ConfigTagTemplate.array().optional()
 });
 
 export type RecursiveConfigSubmoduleSchema = Zod.infer<typeof ConfigSubmoduleSchema> & {
@@ -76,6 +107,7 @@ export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.laz
 export class ConfigBase {
     readonly identifier!: string;
     readonly managed!: boolean;
+    readonly version?: string;
     readonly upstreams!: readonly {
         readonly name: string;
         readonly url: string
@@ -93,6 +125,9 @@ export class ConfigBase {
     readonly releaseTagTemplate?: string;
     readonly hotfixTagTemplate?: string;
     readonly tags!: readonly string[];
+    readonly integrations!: readonly IntegrationBase[];
+    readonly commitMessageTemplates!: readonly MessageTemplateBase[];
+    readonly tagTemplates!: readonly TagTemplateBase[];
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
         const hash = Crypto.createHash(algorithm);
@@ -105,6 +140,9 @@ export class ConfigBase {
 
         if (!this.managed)
             hash.update('unmanaged');
+
+        if (this.version)
+            hash.update(this.version);
 
         for (const upstream of this.upstreams) {
             hash.update(upstream.name);
@@ -136,6 +174,14 @@ export class ConfigBase {
         for (const tag of this.tags)
             hash.update(tag);
 
+        for (const integration of this.integrations)
+            integration.updateHash(hash);
+
+        for (const messageTemplate of this.commitMessageTemplates)
+            messageTemplate.updateHash(hash);
+        for (const tagTemplate of this.tagTemplates)
+            tagTemplate.updateHash(hash);
+
         return this;
     }
 
@@ -143,6 +189,7 @@ export class ConfigBase {
         return {
             identifier: this.identifier,
             managed: this.managed === false ? this.managed : undefined,
+            version: this.version,
             upstreams: this.upstreams.slice(),
             submodules: this.submodules.length ? this.submodules.map(i => i.toHash()) : undefined,
             features: this.features.length ? this.features.map(i => i.toHash()) : undefined,
@@ -156,8 +203,22 @@ export class ConfigBase {
             hotfixMessageTemplate: this.hotfixMessageTemplate,
             releaseTagTemplate: this.releaseTagTemplate,
             hotfixTagTemplate: this.hotfixTagTemplate,
-            tags: this.tags.length ? this.tags.slice() : undefined
+            tags: this.tags.length ? this.tags.slice() : undefined,
+            integrations: this.integrations.length ? this.integrations.map(i => i.toHash()) : undefined,
+            commitMessageTemplates: this.commitMessageTemplates.length ? this.commitMessageTemplates.map(i => i.toHash()) : undefined,
+            tagTemplates: this.tagTemplates.length ? this.tagTemplates.map(i => i.toHash()) : undefined
         }
+    }
+
+    public resolveVersion() {
+        if (!this.version)
+            return;
+
+        const version = Semver.clean(this.version);
+        if (!version)
+            throw new Error(`Version "${this.version}" is not a valid semver format`);
+
+        return version;
     }
 }
 export class SubmoduleBase {
@@ -191,6 +252,7 @@ export class FeatureBase {
     readonly branchName!: string;
     readonly sourceSha!: string;
     readonly upstream?: string;
+    readonly tags!: TaggingBase[];
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
@@ -198,6 +260,9 @@ export class FeatureBase {
         hash.update(this.sourceSha);
 
         this.upstream && hash.update(this.upstream);
+
+        for (const tag of this.tags)
+            tag.updateHash(hash);
 
         return this;
     }
@@ -217,6 +282,7 @@ export class ReleaseBase {
     readonly sourceSha!: string;
     readonly upstream?: string;
     readonly intermediate!: boolean;
+    readonly tags!: TaggingBase[];
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
@@ -226,6 +292,9 @@ export class ReleaseBase {
         this.upstream && hash.update(this.upstream);
 
         hash.update(this.intermediate.toString());
+
+        for (const tag of this.tags)
+            tag.updateHash(hash);
 
         return this;
     }
@@ -246,6 +315,7 @@ export class HotfixBase {
     readonly sourceSha!: string;
     readonly upstream?: string;
     readonly intermediate!: boolean;
+    readonly tags!: TaggingBase[];
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
@@ -255,6 +325,9 @@ export class HotfixBase {
         this.upstream && hash.update(this.upstream);
 
         hash.update(this.intermediate.toString());
+
+        for (const tag of this.tags)
+            tag.updateHash(hash);
 
         return this;
     }
@@ -308,6 +381,88 @@ export class SupportBase {
             features: this.features.map(i => i.toHash()),
             releases: this.releases.map(i => i.toHash()),
             hotfixes: this.hotfixes.map(i => i.toHash())
+        }
+    }
+}
+
+export class IntegrationBase {
+    readonly plugin!: string;
+    readonly options!: Record<string, unknown>;
+
+    public updateHash(hash: Crypto.Hash) {
+        hash.update(this.plugin);
+
+        for (const key in this.options)
+            hash.update(key + '=' + this.options[key]);
+
+        return this;
+    }
+
+    public toHash() {
+        return {
+            plugin: this.plugin,
+            options: _.isEmpty(this.options) ? undefined : { ...this.options }
+        }
+    }
+}
+
+export class TaggingBase {
+    readonly name!: string;
+    readonly annotation?: string;
+
+    public updateHash(hash: Crypto.Hash) {
+        hash.update(this.name);
+
+        if (this.annotation)
+            hash.update(this.annotation);
+
+        return this;
+    }
+
+    public toHash() {
+        return {
+            name: this.name,
+            annotation: this.annotation
+        }
+    }
+}
+
+export class MessageTemplateBase {
+    readonly name!: string;
+    readonly message!: string;
+
+    public updateHash(hash: Crypto.Hash) {
+        hash.update(this.name);
+        hash.update(this.message);
+
+        return this;
+    }
+
+    public toHash() {
+        return {
+            name: this.name,
+            message: this.message
+        }
+    }
+}
+export class TagTemplateBase {
+    readonly name!: string;
+    readonly tag!: string;
+    readonly annotation?: string;
+
+    public updateHash(hash: Crypto.Hash) {
+        hash.update(this.name);
+        hash.update(this.tag);
+        this.annotation && hash.update(this.annotation);
+
+        return this;
+    }
+
+    public toHash() {
+        return {
+            name: this.name,
+            tag: this.tag,
+            annotation: this.annotation
         }
     }
 }
