@@ -190,7 +190,7 @@ export class ConfigBase {
             identifier: this.identifier,
             managed: this.managed === false ? this.managed : undefined,
             version: this.version,
-            upstreams: this.upstreams.slice(),
+            upstreams: this.upstreams.length ? this.upstreams.slice() : undefined,
             submodules: this.submodules.length ? this.submodules.map(i => i.toHash()) : undefined,
             features: this.features.length ? this.features.map(i => i.toHash()) : undefined,
             releases: this.releases.length ? this.releases.map(i => i.toHash()) : undefined,
@@ -392,8 +392,7 @@ export class IntegrationBase {
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.plugin);
 
-        for (const key in this.options)
-            hash.update(key + '=' + this.options[key]);
+        hash.update(JSON.stringify(this.options))
 
         return this;
     }
