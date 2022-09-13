@@ -87,7 +87,9 @@ export const ConfigSchema = Zod.object({
     tags: Zod.string().array().optional(),
     integrations: ConfigIntegrationSchema.array().optional(),
     commitMessageTemplates: ConfigMessageTemplate.array().optional(),
-    tagTemplates: ConfigTagTemplate.array().optional()
+    tagTemplates: ConfigTagTemplate.array().optional(),
+    masterBranchName: Zod.string().optional(),
+    developBranchName: Zod.string().optional()
 });
 
 export type RecursiveConfigSubmoduleSchema = Zod.infer<typeof ConfigSubmoduleSchema> & {
@@ -128,6 +130,8 @@ export class ConfigBase {
     readonly integrations!: readonly IntegrationBase[];
     readonly commitMessageTemplates!: readonly MessageTemplateBase[];
     readonly tagTemplates!: readonly TagTemplateBase[];
+    readonly masterBranchName?: string;
+    readonly developBranchName?: string;
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
         const hash = Crypto.createHash(algorithm);
@@ -182,6 +186,9 @@ export class ConfigBase {
         for (const tagTemplate of this.tagTemplates)
             tagTemplate.updateHash(hash);
 
+        this.masterBranchName && hash.update(this.masterBranchName);
+        this.developBranchName && hash.update(this.developBranchName);
+
         return this;
     }
 
@@ -206,7 +213,9 @@ export class ConfigBase {
             tags: this.tags.length ? this.tags.slice() : undefined,
             integrations: this.integrations.length ? this.integrations.map(i => i.toHash()) : undefined,
             commitMessageTemplates: this.commitMessageTemplates.length ? this.commitMessageTemplates.map(i => i.toHash()) : undefined,
-            tagTemplates: this.tagTemplates.length ? this.tagTemplates.map(i => i.toHash()) : undefined
+            tagTemplates: this.tagTemplates.length ? this.tagTemplates.map(i => i.toHash()) : undefined,
+            masterBranchName: this.masterBranchName,
+            developBranchName: this.developBranchName
         }
     }
 
