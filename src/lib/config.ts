@@ -65,6 +65,7 @@ export const ConfigIntegrationSchema = Zod.object({
     options: Zod.record(Zod.string(), Zod.unknown()).optional()
 });
 export const ConfigSchema = Zod.object({
+    apiVersion: Zod.string().optional(),
     identifier: Zod.string(),
     managed: Zod.boolean().optional(),
     version: Zod.string().optional(),
@@ -89,7 +90,8 @@ export const ConfigSchema = Zod.object({
     commitMessageTemplates: ConfigMessageTemplate.array().optional(),
     tagTemplates: ConfigTagTemplate.array().optional(),
     masterBranchName: Zod.string().optional(),
-    developBranchName: Zod.string().optional()
+    developBranchName: Zod.string().optional(),
+    dependencies: Zod.string().array().optional()
 });
 
 export type RecursiveConfigSubmoduleSchema = Zod.infer<typeof ConfigSubmoduleSchema> & {
@@ -100,13 +102,23 @@ export const RecursiveConfigSubmoduleSchema: Zod.ZodType<RecursiveConfigSubmodul
 }));
 
 export type RecursiveConfigSchema = Zod.infer<typeof ConfigSchema> & {
-    submodules?: RecursiveConfigSubmoduleSchema[]
+    submodules?: RecursiveConfigSubmoduleSchema[];
 };
 export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.lazy(() => ConfigSchema.extend({
     submodules: RecursiveConfigSubmoduleSchema.array().optional()
 }));
 
+export const API_VERSION = 'v1.0';
+export function resolveApiVersion() {
+    const version = Semver.coerce(API_VERSION);
+    if (!version)
+        throw new Error(`Version "${API_VERSION}" is not a valid semver format`);
+
+    return version.toString();
+}
+
 export class ConfigBase {
+    readonly apiVersion?: string;
     readonly identifier!: string;
     readonly managed!: boolean;
     readonly version?: string;
@@ -132,6 +144,7 @@ export class ConfigBase {
     readonly tagTemplates!: readonly TagTemplateBase[];
     readonly masterBranchName?: string;
     readonly developBranchName?: string;
+    readonly dependencies?: readonly string[]
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
         const hash = Crypto.createHash(algorithm);
@@ -160,11 +173,11 @@ export class ConfigBase {
 
         for (const submodule of this.submodules)
             submodule.updateHash(hash);
-        for (const feature of this.features)
+        for (const feature of this.features.filter(i => !i.shadow))
             feature.updateHash(hash);
-        for (const release of this.releases)
+        for (const release of this.releases.filter(i => !i.shadow))
             release.updateHash(hash);
-        for (const hotfix of this.hotfixes)
+        for (const hotfix of this.hotfixes.filter(i => !i.shadow))
             hotfix.updateHash(hash);
         for (const support of this.supports)
             support.updateHash(hash);
@@ -189,19 +202,27 @@ export class ConfigBase {
         this.masterBranchName && hash.update(this.masterBranchName);
         this.developBranchName && hash.update(this.developBranchName);
 
+        for (const dependency of this.dependencies ?? [])
+            hash.update(dependency);
+
         return this;
     }
 
     public toHash() {
+        const features = this.features.filter(i => !i.shadow);
+        const releases = this.releases.filter(i => !i.shadow);
+        const hotfixes = this.hotfixes.filter(i => !i.shadow);
+
         return {
+            apiVersion: this.apiVersion,
             identifier: this.identifier,
             managed: this.managed === false ? this.managed : undefined,
             version: this.version,
             upstreams: this.upstreams.length ? this.upstreams.slice() : undefined,
             submodules: this.submodules.length ? this.submodules.map(i => i.toHash()) : undefined,
-            features: this.features.length ? this.features.map(i => i.toHash()) : undefined,
-            releases: this.releases.length ? this.releases.map(i => i.toHash()) : undefined,
-            hotfixes: this.hotfixes.length ? this.hotfixes.map(i => i.toHash()) : undefined,
+            features: features.length ? features.map(i => i.toHash()) : undefined,
+            releases: releases.length ? releases.map(i => i.toHash()) : undefined,
+            hotfixes: hotfixes.length ? hotfixes.map(i => i.toHash()) : undefined,
             supports: this.supports.length ? this.supports.map(i => i.toHash()) : undefined,
             included: this.included.length ? this.included.slice() : undefined,
             excluded: this.excluded.length ? this.excluded.slice() : undefined,
@@ -215,10 +236,18 @@ export class ConfigBase {
             commitMessageTemplates: this.commitMessageTemplates.length ? this.commitMessageTemplates.map(i => i.toHash()) : undefined,
             tagTemplates: this.tagTemplates.length ? this.tagTemplates.map(i => i.toHash()) : undefined,
             masterBranchName: this.masterBranchName,
-            developBranchName: this.developBranchName
+            developBranchName: this.developBranchName,
+            dependencies: this.dependencies?.length ? this.dependencies.slice() : undefined
         }
     }
 
+    public resolveApiVersion() {
+        const version = Semver.coerce(this.apiVersion ?? 'v0.0');
+        if (!version)
+            throw new Error(`Version "${this.apiVersion ?? 'v0.0'}" is not a valid semver format`);
+
+        return version.toString();
+    }
     public resolveVersion() {
         if (!this.version)
             return;
@@ -263,6 +292,8 @@ export class FeatureBase {
     readonly upstream?: string;
     readonly tags!: TaggingBase[];
 
+    readonly shadow?: boolean;
+
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
         hash.update(this.branchName);
@@ -292,6 +323,8 @@ export class ReleaseBase {
     readonly upstream?: string;
     readonly intermediate!: boolean;
     readonly tags!: TaggingBase[];
+
+    readonly shadow?: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
@@ -325,6 +358,8 @@ export class HotfixBase {
     readonly upstream?: string;
     readonly intermediate!: boolean;
     readonly tags!: TaggingBase[];
+
+    readonly shadow?: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
