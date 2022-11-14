@@ -31,6 +31,7 @@ export const ConfigFeatureSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
+    version: Zod.string().optional(),
     upstream: Zod.string().optional(),
     tags: ConfigTaggingSchema.array().optional()
 });
@@ -38,6 +39,7 @@ export const ConfigReleaseSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
+    version: Zod.string().optional(),
     upstream: Zod.string().optional(),
     intermediate: Zod.boolean().optional(),
     tags: ConfigTaggingSchema.array().optional()
@@ -46,6 +48,7 @@ export const ConfigHotfixSchema = Zod.object({
     name: Zod.string(),
     branchName: Zod.string(),
     sourceSha: Zod.string(),
+    version: Zod.string().optional(),
     upstream: Zod.string().optional(),
     intermediate: Zod.boolean().optional(),
     tags: ConfigTaggingSchema.array().optional()
@@ -55,6 +58,8 @@ export const ConfigSupportSchema = Zod.object({
     masterBranchName: Zod.string(),
     developBranchName: Zod.string(),
     sourceSha: Zod.string(),
+    developVersion: Zod.string().optional(),
+    masterVersion: Zod.string().optional(),
     upstream: Zod.string().optional(),
     features: ConfigFeatureSchema.array().optional(),
     releases: ConfigReleaseSchema.array().optional(),
@@ -69,6 +74,8 @@ export const ConfigSchema = Zod.object({
     identifier: Zod.string(),
     managed: Zod.boolean().optional(),
     version: Zod.string().optional(),
+    developVersion: Zod.string().optional(),
+    masterVersion: Zod.string().optional(),
     upstreams: Zod.object({
         name: Zod.string(),
         url: Zod.string()
@@ -108,7 +115,7 @@ export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.laz
     submodules: RecursiveConfigSubmoduleSchema.array().optional()
 }));
 
-export const API_VERSION = 'v1.0';
+export const API_VERSION = 'v1.1';
 export function resolveApiVersion() {
     const version = Semver.coerce(API_VERSION);
     if (!version)
@@ -121,7 +128,8 @@ export class ConfigBase {
     readonly apiVersion?: string;
     readonly identifier!: string;
     readonly managed!: boolean;
-    readonly version?: string;
+    readonly developVersion?: string;
+    readonly masterVersion?: string;
     readonly upstreams!: readonly {
         readonly name: string;
         readonly url: string
@@ -153,13 +161,18 @@ export class ConfigBase {
         return hash.digest(encoding);
     }
     public updateHash(hash: Crypto.Hash) {
+        if (this.apiVersion)
+            hash.update(this.apiVersion);
+
         hash.update(this.identifier);
 
         if (!this.managed)
             hash.update('unmanaged');
 
-        if (this.version)
-            hash.update(this.version);
+        if (this.developVersion)
+            hash.update(this.developVersion);
+        if (this.masterVersion)
+            hash.update(this.masterVersion);
 
         for (const upstream of this.upstreams) {
             hash.update(upstream.name);
@@ -208,17 +221,18 @@ export class ConfigBase {
         return this;
     }
 
-    public toHash() {
+    public toHash(stampApiVersion = false) {
         const submodules = this.submodules.filter(i => !i.shadow);
         const features = this.features.filter(i => !i.shadow);
         const releases = this.releases.filter(i => !i.shadow);
         const hotfixes = this.hotfixes.filter(i => !i.shadow);
 
         return {
-            apiVersion: this.apiVersion,
+            apiVersion: stampApiVersion ? resolveApiVersion() : this.apiVersion,
             identifier: this.identifier,
             managed: this.managed === false ? this.managed : undefined,
-            version: this.version,
+            developVersion: this.developVersion,
+            masterVersion: this.masterVersion,
             upstreams: this.upstreams.length ? this.upstreams.slice() : undefined,
             submodules: submodules.length ? submodules.map(i => i.toHash()) : undefined,
             features: features.length ? features.map(i => i.toHash()) : undefined,
@@ -249,13 +263,15 @@ export class ConfigBase {
 
         return version.toString();
     }
-    public resolveVersion() {
-        if (!this.version)
+    public resolveVersion(type: 'develop' | 'master' = 'develop') {
+        const currentVersion = type === 'develop' ? this.developVersion : this.masterVersion;
+
+        if (!currentVersion)
             return;
 
-        const version = Semver.clean(this.version);
+        const version = Semver.clean(currentVersion);
         if (!version)
-            throw new Error(`Version "${this.version}" is not a valid semver format`);
+            throw new Error(`Version "${currentVersion}" is not a valid semver format`);
 
         return version;
     }
@@ -293,6 +309,7 @@ export class FeatureBase {
     readonly branchName!: string;
     readonly sourceSha!: string;
     readonly upstream?: string;
+    readonly version?: string;
     readonly tags!: TaggingBase[];
 
     readonly shadow?: boolean;
@@ -301,6 +318,9 @@ export class FeatureBase {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
+
+        if (this.version)
+            hash.update(this.version);
 
         this.upstream && hash.update(this.upstream);
 
@@ -315,14 +335,27 @@ export class FeatureBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
+            version: this.version,
             upstream: this.upstream
         }
+    }
+
+    public resolveVersion() {
+        if (!this.version)
+            return;
+
+        const version = Semver.clean(this.version);
+        if (!version)
+            throw new Error(`Version "${this.version}" is not a valid semver format`);
+
+        return version;
     }
 }
 export class ReleaseBase {
     readonly name!: string;
     readonly branchName!: string;
     readonly sourceSha!: string;
+    readonly version?: string;
     readonly upstream?: string;
     readonly intermediate!: boolean;
     readonly tags!: TaggingBase[];
@@ -333,6 +366,9 @@ export class ReleaseBase {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
+
+        if (this.version)
+            hash.update(this.version);
 
         this.upstream && hash.update(this.upstream);
 
@@ -349,15 +385,28 @@ export class ReleaseBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
+            version: this.version,
             upstream: this.upstream,
             intermediate: this.intermediate
         }
+    }
+
+    public resolveVersion() {
+        if (!this.version)
+            return;
+
+        const version = Semver.clean(this.version);
+        if (!version)
+            throw new Error(`Version "${this.version}" is not a valid semver format`);
+
+        return version;
     }
 }
 export class HotfixBase {
     readonly name!: string;
     readonly branchName!: string;
     readonly sourceSha!: string;
+    readonly version?: string;
     readonly upstream?: string;
     readonly intermediate!: boolean;
     readonly tags!: TaggingBase[];
@@ -368,6 +417,9 @@ export class HotfixBase {
         hash.update(this.name);
         hash.update(this.branchName);
         hash.update(this.sourceSha);
+
+        if (this.version)
+            hash.update(this.version);
 
         this.upstream && hash.update(this.upstream);
 
@@ -384,9 +436,21 @@ export class HotfixBase {
             name: this.name,
             branchName: this.branchName,
             sourceSha: this.sourceSha,
+            version: this.version,
             upstream: this.upstream,
             intermediate: this.intermediate
         }
+    }
+
+    public resolveVersion() {
+        if (!this.version)
+            return;
+
+        const version = Semver.clean(this.version);
+        if (!version)
+            throw new Error(`Version "${this.version}" is not a valid semver format`);
+
+        return version;
     }
 }
 export class SupportBase {
@@ -394,6 +458,8 @@ export class SupportBase {
     readonly masterBranchName!: string;
     readonly developBranchName!: string;
     readonly sourceSha!: string;
+    readonly developVersion?: string;
+    readonly masterVersion?: string;
     readonly upstream?: string;
 
     readonly features!: readonly FeatureBase[];
@@ -405,6 +471,11 @@ export class SupportBase {
         hash.update(this.masterBranchName);
         hash.update(this.developBranchName);
         hash.update(this.sourceSha);
+
+        if (this.developVersion)
+            hash.update(this.developVersion);
+        if (this.masterVersion)
+            hash.update(this.masterVersion);
 
         this.upstream && hash.update(this.upstream);
 
@@ -424,11 +495,26 @@ export class SupportBase {
             masterBranchName: this.masterBranchName,
             developBranchName: this.developBranchName,
             sourceSha: this.sourceSha,
+            developVersion: this.developVersion,
+            masterVersion: this.masterVersion,
             upstream: this.upstream,
             features: this.features.map(i => i.toHash()),
             releases: this.releases.map(i => i.toHash()),
             hotfixes: this.hotfixes.map(i => i.toHash())
         }
+    }
+
+    public resolveVersion(type: 'develop' | 'master' = 'develop') {
+        const currentVersion = type === 'develop' ? this.developVersion : this.masterVersion;
+
+        if (!currentVersion)
+            return;
+
+        const version = Semver.clean(currentVersion);
+        if (!version)
+            throw new Error(`Version "${currentVersion}" is not a valid semver format`);
+
+        return version;
     }
 }
 
