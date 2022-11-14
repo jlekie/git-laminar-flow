@@ -171,7 +171,7 @@ export class ConfigBase {
         for (const exclude of this.excluded)
             hash.update(exclude);
 
-        for (const submodule of this.submodules)
+        for (const submodule of this.submodules.filter(i => !i.shadow))
             submodule.updateHash(hash);
         for (const feature of this.features.filter(i => !i.shadow))
             feature.updateHash(hash);
@@ -209,6 +209,7 @@ export class ConfigBase {
     }
 
     public toHash() {
+        const submodules = this.submodules.filter(i => !i.shadow);
         const features = this.features.filter(i => !i.shadow);
         const releases = this.releases.filter(i => !i.shadow);
         const hotfixes = this.hotfixes.filter(i => !i.shadow);
@@ -219,7 +220,7 @@ export class ConfigBase {
             managed: this.managed === false ? this.managed : undefined,
             version: this.version,
             upstreams: this.upstreams.length ? this.upstreams.slice() : undefined,
-            submodules: this.submodules.length ? this.submodules.map(i => i.toHash()) : undefined,
+            submodules: submodules.length ? submodules.map(i => i.toHash()) : undefined,
             features: features.length ? features.map(i => i.toHash()) : undefined,
             releases: releases.length ? releases.map(i => i.toHash()) : undefined,
             hotfixes: hotfixes.length ? hotfixes.map(i => i.toHash()) : undefined,
@@ -264,6 +265,8 @@ export class SubmoduleBase {
     readonly path!: string;
     readonly url?: string;
     readonly tags!: readonly string[];
+
+    readonly shadow?: boolean;
 
     public updateHash(hash: Crypto.Hash) {
         hash.update(this.name);
