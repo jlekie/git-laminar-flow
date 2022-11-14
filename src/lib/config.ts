@@ -228,7 +228,7 @@ export class ConfigBase {
         const hotfixes = this.hotfixes.filter(i => !i.shadow);
 
         return {
-            apiVersion: stampApiVersion ? resolveApiVersion() : this.apiVersion,
+            apiVersion: stampApiVersion ? `v${resolveApiVersion()}` : this.apiVersion,
             identifier: this.identifier,
             managed: this.managed === false ? this.managed : undefined,
             developVersion: this.developVersion,
