@@ -479,17 +479,21 @@ export class SupportBase {
 
         this.upstream && hash.update(this.upstream);
 
-        for (const feature of this.features)
+        for (const feature of this.features.filter(i => !i.shadow))
             feature.updateHash(hash);
-        for (const release of this.releases)
+        for (const release of this.releases.filter(i => !i.shadow))
             release.updateHash(hash);
-        for (const hotfix of this.hotfixes)
+        for (const hotfix of this.hotfixes.filter(i => !i.shadow))
             hotfix.updateHash(hash);
 
         return this;
     }
 
     public toHash() {
+        const features = this.features.filter(i => !i.shadow);
+        const releases = this.releases.filter(i => !i.shadow);
+        const hotfixes = this.hotfixes.filter(i => !i.shadow);
+
         return {
             name: this.name,
             masterBranchName: this.masterBranchName,
@@ -498,9 +502,9 @@ export class SupportBase {
             developVersion: this.developVersion,
             masterVersion: this.masterVersion,
             upstream: this.upstream,
-            features: this.features.map(i => i.toHash()),
-            releases: this.releases.map(i => i.toHash()),
-            hotfixes: this.hotfixes.map(i => i.toHash())
+            features: features.length ? features.map(i => i.toHash()) : undefined,
+            releases: releases.length ? releases.map(i => i.toHash()) : undefined,
+            hotfixes: hotfixes.length ? hotfixes.map(i => i.toHash()) : undefined
         }
     }
 
