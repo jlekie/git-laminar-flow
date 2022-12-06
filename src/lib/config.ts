@@ -25,7 +25,8 @@ export const ConfigSubmoduleSchema = Zod.object({
     name: Zod.string(),
     path: Zod.string(),
     url: Zod.string().optional(),
-    tags: Zod.string().array().optional()
+    tags: Zod.string().array().optional(),
+    labels: Zod.record(Zod.string(), Zod.union([ Zod.string(), Zod.string().array() ])).optional()
 });
 export const ConfigFeatureSchema = Zod.object({
     name: Zod.string(),
@@ -98,7 +99,8 @@ export const ConfigSchema = Zod.object({
     tagTemplates: ConfigTagTemplate.array().optional(),
     masterBranchName: Zod.string().optional(),
     developBranchName: Zod.string().optional(),
-    dependencies: Zod.string().array().optional()
+    dependencies: Zod.string().array().optional(),
+    labels: Zod.record(Zod.string(), Zod.union([ Zod.string(), Zod.string().array() ])).optional()
 });
 
 export type RecursiveConfigSubmoduleSchema = Zod.infer<typeof ConfigSubmoduleSchema> & {
@@ -115,7 +117,7 @@ export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.laz
     submodules: RecursiveConfigSubmoduleSchema.array().optional()
 }));
 
-export const API_VERSION = 'v1.1';
+export const API_VERSION = 'v1.2';
 export function resolveApiVersion() {
     const version = Semver.coerce(API_VERSION);
     if (!version)
@@ -153,6 +155,7 @@ export class ConfigBase {
     readonly masterBranchName?: string;
     readonly developBranchName?: string;
     readonly dependencies?: readonly string[]
+    readonly labels!: Record<string, string | string[]>;
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
         const hash = Crypto.createHash(algorithm);
@@ -218,6 +221,9 @@ export class ConfigBase {
         for (const dependency of this.dependencies ?? [])
             hash.update(dependency);
 
+        if (!_.isEmpty(this.labels))
+            hash.update(JSON.stringify(this.labels));
+
         return this;
     }
 
@@ -252,7 +258,8 @@ export class ConfigBase {
             tagTemplates: this.tagTemplates.length ? this.tagTemplates.map(i => i.toHash()) : undefined,
             masterBranchName: this.masterBranchName,
             developBranchName: this.developBranchName,
-            dependencies: this.dependencies?.length ? this.dependencies.slice() : undefined
+            dependencies: this.dependencies?.length ? this.dependencies.slice() : undefined,
+            labels: _.isEmpty(this.labels) ? undefined : { ...this.labels }
         }
     }
 
@@ -281,6 +288,7 @@ export class SubmoduleBase {
     readonly path!: string;
     readonly url?: string;
     readonly tags!: readonly string[];
+    readonly labels!: Record<string, string | string[]>;
 
     readonly shadow?: boolean;
 
@@ -292,6 +300,9 @@ export class SubmoduleBase {
         for (const tag of this.tags)
             hash.update(tag);
 
+        if (!_.isEmpty(this.labels))
+            hash.update(JSON.stringify(this.labels));
+
         return this;
     }
 
@@ -300,7 +311,8 @@ export class SubmoduleBase {
             name: this.name,
             path: this.path,
             url: this.url,
-            tags: this.tags.length ? this.tags.slice() : undefined
+            tags: this.tags.length ? this.tags.slice() : undefined,
+            labels: _.isEmpty(this.labels) ? undefined : { ...this.labels }
         }
     }
 }
