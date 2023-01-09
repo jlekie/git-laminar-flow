@@ -99,7 +99,10 @@ export const ConfigSchema = Zod.object({
     tagTemplates: ConfigTagTemplate.array().optional(),
     masterBranchName: Zod.string().optional(),
     developBranchName: Zod.string().optional(),
-    dependencies: Zod.string().array().optional(),
+    dependencies: Zod.union([
+        Zod.string(),
+        Zod.record(Zod.string())
+    ]).array().optional(),
     labels: Zod.record(Zod.string(), Zod.union([ Zod.string(), Zod.string().array() ])).optional()
 });
 
@@ -117,7 +120,7 @@ export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.laz
     submodules: RecursiveConfigSubmoduleSchema.array().optional()
 }));
 
-export const API_VERSION = 'v1.2';
+export const API_VERSION = 'v1.3';
 export function resolveApiVersion() {
     const version = Semver.coerce(API_VERSION);
     if (!version)
@@ -154,7 +157,7 @@ export class ConfigBase {
     readonly tagTemplates!: readonly TagTemplateBase[];
     readonly masterBranchName?: string;
     readonly developBranchName?: string;
-    readonly dependencies?: readonly string[]
+    readonly dependencies?: readonly (string | Record<string, string>)[]
     readonly labels!: Record<string, string | string[]>;
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
@@ -219,7 +222,7 @@ export class ConfigBase {
         this.developBranchName && hash.update(this.developBranchName);
 
         for (const dependency of this.dependencies ?? [])
-            hash.update(dependency);
+            hash.update(JSON.stringify(dependency));
 
         if (!_.isEmpty(this.labels))
             hash.update(JSON.stringify(this.labels));
@@ -651,6 +654,7 @@ export type ConfigReference = {
     hostname?: string;
     namespace: string;
     name: string;
+    support?: string;
 }
 export function parseConfigReference(uri: string): ConfigReference {
     const { protocol, qualifier } = ConfigUriSchema.parse(uri);
@@ -682,7 +686,16 @@ export function parseConfigReference(uri: string): ConfigReference {
     else if (protocol === 'glfs') {
         const parts = qualifier.split('/');
 
-        if (parts.length === 3) {
+        if (parts.length === 4) {
+            return {
+                type: protocol,
+                hostname: parts[0],
+                namespace: parts[1],
+                name: parts[2],
+                support: parts[3]
+            }
+        }
+        else if (parts.length === 3) {
             return {
                 type: protocol,
                 hostname: parts[0],
