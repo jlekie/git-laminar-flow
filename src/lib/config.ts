@@ -103,7 +103,8 @@ export const ConfigSchema = Zod.object({
         Zod.string(),
         Zod.record(Zod.string())
     ]).array().optional(),
-    labels: Zod.record(Zod.string(), Zod.union([ Zod.string(), Zod.string().array() ])).optional()
+    labels: Zod.record(Zod.string(), Zod.union([ Zod.string(), Zod.string().array() ])).optional(),
+    annotations: Zod.record(Zod.string(), Zod.string()).optional()
 });
 
 export type RecursiveConfigSubmoduleSchema = Zod.infer<typeof ConfigSubmoduleSchema> & {
@@ -120,7 +121,7 @@ export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.laz
     submodules: RecursiveConfigSubmoduleSchema.array().optional()
 }));
 
-export const API_VERSION = 'v1.3';
+export const API_VERSION = 'v1.4';
 export function resolveApiVersion() {
     const version = Semver.coerce(API_VERSION);
     if (!version)
@@ -159,6 +160,7 @@ export class ConfigBase {
     readonly developBranchName?: string;
     readonly dependencies?: readonly (string | Record<string, string>)[]
     readonly labels!: Record<string, string | string[]>;
+    readonly annotations!: Record<string, string>;
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
         const hash = Crypto.createHash(algorithm);
@@ -227,6 +229,9 @@ export class ConfigBase {
         if (!_.isEmpty(this.labels))
             hash.update(JSON.stringify(this.labels));
 
+        if (!_.isEmpty(this.annotations))
+            hash.update(JSON.stringify(this.annotations));
+
         return this;
     }
 
@@ -262,7 +267,8 @@ export class ConfigBase {
             masterBranchName: this.masterBranchName,
             developBranchName: this.developBranchName,
             dependencies: this.dependencies?.length ? this.dependencies.slice() : undefined,
-            labels: _.isEmpty(this.labels) ? undefined : { ...this.labels }
+            labels: _.isEmpty(this.labels) ? undefined : { ...this.labels },
+            annotations: _.isEmpty(this.annotations) ? undefined : { ...this.annotations }
         }
     }
 
@@ -292,6 +298,7 @@ export class SubmoduleBase {
     readonly url?: string;
     readonly tags!: readonly string[];
     readonly labels!: Record<string, string | string[]>;
+    readonly annotations!: Record<string, string>;
 
     readonly shadow?: boolean;
 
@@ -306,6 +313,9 @@ export class SubmoduleBase {
         if (!_.isEmpty(this.labels))
             hash.update(JSON.stringify(this.labels));
 
+        if (!_.isEmpty(this.annotations))
+            hash.update(JSON.stringify(this.annotations));
+
         return this;
     }
 
@@ -315,7 +325,8 @@ export class SubmoduleBase {
             path: this.path,
             url: this.url,
             tags: this.tags.length ? this.tags.slice() : undefined,
-            labels: _.isEmpty(this.labels) ? undefined : { ...this.labels }
+            labels: _.isEmpty(this.labels) ? undefined : { ...this.labels },
+            annotations: _.isEmpty(this.annotations) ? undefined : { ...this.annotations }
         }
     }
 }
