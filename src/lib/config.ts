@@ -26,7 +26,8 @@ export const ConfigSubmoduleSchema = Zod.object({
     path: Zod.string(),
     url: Zod.string().optional(),
     tags: Zod.string().array().optional(),
-    labels: Zod.record(Zod.string(), Zod.union([ Zod.string(), Zod.string().array() ])).optional()
+    labels: Zod.record(Zod.string(), Zod.union([ Zod.string(), Zod.string().array() ])).optional(),
+    annotations: Zod.record(Zod.string(), Zod.unknown()).optional()
 });
 export const ConfigFeatureSchema = Zod.object({
     name: Zod.string(),
@@ -104,7 +105,7 @@ export const ConfigSchema = Zod.object({
         Zod.record(Zod.string())
     ]).array().optional(),
     labels: Zod.record(Zod.string(), Zod.union([ Zod.string(), Zod.string().array() ])).optional(),
-    annotations: Zod.record(Zod.string(), Zod.string()).optional()
+    annotations: Zod.record(Zod.string(), Zod.unknown()).optional()
 });
 
 export type RecursiveConfigSubmoduleSchema = Zod.infer<typeof ConfigSubmoduleSchema> & {
@@ -121,7 +122,7 @@ export const RecursiveConfigSchema: Zod.ZodType<RecursiveConfigSchema> = Zod.laz
     submodules: RecursiveConfigSubmoduleSchema.array().optional()
 }));
 
-export const API_VERSION = 'v1.4';
+export const API_VERSION = 'v1.5';
 export function resolveApiVersion() {
     const version = Semver.coerce(API_VERSION);
     if (!version)
@@ -160,7 +161,7 @@ export class ConfigBase {
     readonly developBranchName?: string;
     readonly dependencies?: readonly (string | Record<string, string>)[]
     readonly labels!: Record<string, string | string[]>;
-    readonly annotations!: Record<string, string>;
+    readonly annotations!: Record<string, unknown>;
 
     public calculateHash({ algorithm = 'sha256', encoding = 'hex' }: { algorithm?: string, encoding?: Crypto.BinaryToTextEncoding } = {}) {
         const hash = Crypto.createHash(algorithm);
@@ -298,7 +299,7 @@ export class SubmoduleBase {
     readonly url?: string;
     readonly tags!: readonly string[];
     readonly labels!: Record<string, string | string[]>;
-    readonly annotations!: Record<string, string>;
+    readonly annotations!: Record<string, unknown>;
 
     readonly shadow?: boolean;
 
